@@ -88,3 +88,7 @@ SELECT AVG(amount) FROM expenses;
 SELECT categories.name, SUM(amount) FROM expenses
 JOIN categories ON category_id = categories.id
 GROUP BY categories.name;
+
+-- 17. Проверка внешнего ключа: категории с id = 999 нет, вставка должна завершиться ошибкой
+INSERT INTO expenses (description, amount, category_id, spent_at)
+VALUES ('Тест внешнего ключа', 100, 999, '2026-09-15');
