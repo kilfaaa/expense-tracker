@@ -137,7 +137,24 @@ def change_expense(conn):
 
 
 def delete_expense(conn):
-    print("в разработке")
+    print()
+    show_expenses(conn)
+    expense_text = input("Введите номер расхода, который хотите удалить: ").strip()
+    if not expense_text.isdigit():
+        print("\nОшибка: номер расхода должен быть числом.\n")
+        return
+    expense_id = int(expense_text)
+
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM expenses WHERE id = %s;", (expense_id,))
+        deleted_count = cur.rowcount
+    conn.commit()
+
+    if deleted_count == 0:
+        print(f"\nРасход с номером {expense_id} не найден.\n")
+        return
+
+    print(f"\nРасход {expense_id} удалён.\n")
 
 
 def show_expenses_sum(conn):
