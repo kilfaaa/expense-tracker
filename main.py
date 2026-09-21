@@ -1,15 +1,31 @@
 import os
-import sys
 
 import psycopg
 
+
 def show_category(conn):
-    cur = conn.cursor()
-    for category_id, name in cur.execute("SELECT * FROM categories"):
-        print (category_id, name)
+    with conn.cursor() as cur:
+        cur.execute("SELECT id, name FROM categories ORDER BY id;")
+        for category_id, name in cur.fetchall():
+            print(category_id, name)
+
 
 def add_category(conn):
-    cur = conn.cursor()
+    category_name = input("Введите название категории: ").strip()
+    if not category_name:
+        print("\nОшибка: название категории не может быть пустым.\n")
+        return
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute("INSERT INTO categories (name) VALUES (%s);", (category_name,),)
+        conn.commit()
+    except psycopg.errors.UniqueViolation:
+        conn.rollback()
+        print("\nОшибка: такая категория уже существует.\n")
+        return
+
+    print(f"\nКатегория «{category_name}» добавлена.\n")
 
 
 def add_expense(conn):
