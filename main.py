@@ -243,7 +243,15 @@ def delete_expense(conn):
 
 
 def show_expenses_sum(conn):
-    print("в разработке")
+    with conn.cursor() as cur:
+        cur.execute("SELECT SUM(amount) FROM expenses;")
+        total = cur.fetchone()[0]
+
+    if total is None:
+        print("\nСписок расходов пуст, сумма отсутствует.\n")
+        return
+
+    print(f"\nОбщая сумма расходов: {total}\n")
 
 
 def show_category_sum(conn):
