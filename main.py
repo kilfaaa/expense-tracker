@@ -300,6 +300,53 @@ def show_expenses_by_date_range(conn):
     print_expenses(rows)
 
 
+def merge_categories(conn):
+    print()
+    show_category(conn)
+
+    old_text = input("Введите номер категории, которую хотите объединить (удалить): ").strip()
+    if not old_text.isdigit():
+        print("\nОшибка: номер категории должен быть числом.\n")
+        return
+    old_category_id = int(old_text)
+
+    new_text = input("Введите номер категории, куда перенести расходы: ").strip()
+    if not new_text.isdigit():
+        print("\nОшибка: номер категории должен быть числом.\n")
+        return
+    new_category_id = int(new_text)
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE expenses SET category_id = %s WHERE category_id = %s;",
+                (new_category_id, old_category_id),
+            )
+            moved_count = cur.rowcount
+
+            cur.execute(
+                "DELETE FROM categories WHERE id = %s;",
+                (old_category_id,),
+            )
+            deleted_count = cur.rowcount
+
+        conn.commit()
+    except psycopg.errors.ForeignKeyViolation:
+        conn.rollback()
+        print(f"\nОшибка: категории с номером {new_category_id} не существует.\n")
+        return
+    except psycopg.Error:
+        conn.rollback()
+        print("\nОшибка: операция отменена, ничего не изменилось.\n")
+        return
+
+    if deleted_count == 0:
+        print(f"\nКатегория с номером {old_category_id} не найдена.\n")
+        return
+
+    print(f"\nПеренесено расходов: {moved_count}. Категория {old_category_id} удалена.\n")
+
+
 def main():
     database_url = os.getenv("DATABASE_URL")
     if database_url is None:
