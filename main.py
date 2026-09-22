@@ -133,7 +133,92 @@ def show_expenses_in_category(conn):
 
 
 def change_expense(conn):
-    print("в разработке")
+    print()
+    show_expenses(conn)
+    expense_text = input("Введите номер расхода, который хотите изменить: ").strip()
+    if not expense_text.isdigit():
+        print("\nОшибка: номер расхода должен быть числом.\n")
+        return
+    expense_id = int(expense_text)
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT description, amount, category_id, spent_at FROM expenses WHERE id = %s;",
+            (expense_id,),
+        )
+        current = cur.fetchone()
+
+    if current is None:
+        print(f"\nРасход с номером {expense_id} не найден.\n")
+        return
+
+    old_description, old_amount, old_category_id, old_spent_at = current
+
+    description_text = input(
+        f"Описание [{old_description}] (Enter — оставить без изменений): "
+    ).strip()
+    new_description = description_text if description_text else old_description
+
+    amount_text = input(
+        f"Сумма [{old_amount}] (Enter — оставить без изменений): "
+    ).strip().replace(",", ".")
+    if amount_text:
+        try:
+            new_amount = Decimal(amount_text)
+        except InvalidOperation:
+            print("\nОшибка: сумма должна быть числом.\n")
+            return
+        if not new_amount.is_finite() or new_amount <= 0:
+            print("\nОшибка: сумма должна быть больше нуля.\n")
+            return
+    else:
+        new_amount = old_amount
+
+    print()
+    show_category(conn)
+    category_text = input(
+        f"Номер категории [{old_category_id}] (Enter — оставить без изменений): "
+    ).strip()
+    if category_text:
+        if not category_text.isdigit():
+            print("\nОшибка: номер категории должен быть числом.\n")
+            return
+        new_category_id = int(category_text)
+    else:
+        new_category_id = old_category_id
+
+    date_text = input(
+        f"Дата [{old_spent_at}] (Enter — оставить без изменений): "
+    ).strip()
+    if date_text:
+        try:
+            new_spent_at = datetime.datetime.strptime(date_text, "%Y-%m-%d").date()
+        except ValueError:
+            print("\nОшибка: неверный формат или несуществующая дата (ГГГГ-ММ-ДД).\n")
+            return
+    else:
+        new_spent_at = old_spent_at
+
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE expenses "
+                "SET description = %s, amount = %s, category_id = %s, spent_at = %s "
+                "WHERE id = %s;",
+                (new_description, new_amount, new_category_id, new_spent_at, expense_id),
+            )
+            updated_count = cur.rowcount
+        conn.commit()
+    except psycopg.errors.ForeignKeyViolation:
+        conn.rollback()
+        print(f"\nОшибка: категории с номером {new_category_id} не существует.\n")
+        return
+
+    if updated_count == 0:
+        print(f"\nРасход с номером {expense_id} не найден.\n")
+        return
+
+    print(f"\nРасход {expense_id} обновлён.\n")
 
 
 def delete_expense(conn):
