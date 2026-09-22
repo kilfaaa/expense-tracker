@@ -275,6 +275,31 @@ def show_category_sum(conn):
     print()
 
 
+def show_expenses_by_date_range(conn):
+    start_text = input("Введите начальную дату (ГГГГ-ММ-ДД): ").strip()
+    end_text = input("Введите конечную дату (ГГГГ-ММ-ДД): ").strip()
+
+    start_date = datetime.datetime.strptime(start_text, "%Y-%m-%d").date()
+    end_date = datetime.datetime.strptime(end_text, "%Y-%m-%d").date()
+
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT expenses.id, description, amount, categories.name, spent_at "
+            "FROM expenses "
+            "JOIN categories ON expenses.category_id = categories.id "
+            "WHERE spent_at BETWEEN %s AND %s "
+            "ORDER BY spent_at;",
+            (start_date, end_date),
+        )
+        rows = cur.fetchall()
+
+    if not rows:
+        print("\nРасходов за этот период нет.\n")
+        return
+
+    print_expenses(rows)
+
+
 def main():
     database_url = os.getenv("DATABASE_URL")
     if database_url is None:
