@@ -255,7 +255,24 @@ def show_expenses_sum(conn):
 
 
 def show_category_sum(conn):
-    print("в разработке")
+    with conn.cursor() as cur:
+        cur.execute(
+            "SELECT categories.name, SUM(amount) "
+            "FROM expenses "
+            "JOIN categories ON expenses.category_id = categories.id "
+            "GROUP BY categories.name "
+            "ORDER BY categories.name;"
+        )
+        rows = cur.fetchall()
+
+    if not rows:
+        print("\nСписок расходов пуст.\n")
+        return
+
+    print()
+    for category_name, total in rows:
+        print(f"{category_name}: {total}")
+    print()
 
 
 def main():
@@ -264,44 +281,47 @@ def main():
         print("Не задана переменная окружения DATABASE_URL")
         return
 
-    with psycopg.connect(database_url) as conn:
-        while True:
-            print("=== Expense - tracker ==="
-                  "\n1. Показать категории"
-                  "\n2. Добавить категорию"
-                  "\n3. Добавить расход"
-                  "\n4. Показать расходы"
-                  "\n5. Показать расходы выбранной категории"
-                  "\n6. Изменить расход"
-                  "\n7. Удалить расход"
-                  "\n8. Показать общую сумму расходов"
-                  "\n9. Показать суммы по категориям"
-                  "\n0. Выход")
+    try:
+        with psycopg.connect(database_url) as conn:
+            while True:
+                print("=== Expense - tracker ==="
+                      "\n1. Показать категории"
+                      "\n2. Добавить категорию"
+                      "\n3. Добавить расход"
+                      "\n4. Показать расходы"
+                      "\n5. Показать расходы выбранной категории"
+                      "\n6. Изменить расход"
+                      "\n7. Удалить расход"
+                      "\n8. Показать общую сумму расходов"
+                      "\n9. Показать суммы по категориям"
+                      "\n0. Выход")
 
-            choice = input("Выберите пункт: ")
-            if choice.isdigit() and 0 <= int(choice) <= 9:
-                if choice == "0":
-                    break
-                elif choice == "1":
-                    show_category(conn)
-                elif choice == "2":
-                    add_category(conn)
-                elif choice == "3":
-                    add_expense(conn)
-                elif choice == "4":
-                    show_expenses(conn)
-                elif choice == "5":
-                    show_expenses_in_category(conn)
-                elif choice == "6":
-                    change_expense(conn)
-                elif choice == "7":
-                    delete_expense(conn)
-                elif choice == "8":
-                    show_expenses_sum(conn)
-                elif choice == "9":
-                    show_category_sum(conn)
-            else:
-                print("\nОшибка: введите число от 0 до 9.\n")
+                choice = input("Выберите пункт: ")
+                if choice.isdigit() and 0 <= int(choice) <= 9:
+                    if choice == "0":
+                        break
+                    elif choice == "1":
+                        show_category(conn)
+                    elif choice == "2":
+                        add_category(conn)
+                    elif choice == "3":
+                        add_expense(conn)
+                    elif choice == "4":
+                        show_expenses(conn)
+                    elif choice == "5":
+                        show_expenses_in_category(conn)
+                    elif choice == "6":
+                        change_expense(conn)
+                    elif choice == "7":
+                        delete_expense(conn)
+                    elif choice == "8":
+                        show_expenses_sum(conn)
+                    elif choice == "9":
+                        show_category_sum(conn)
+                else:
+                    print("\nОшибка: введите число от 0 до 9.\n")
+    except psycopg.OperationalError:
+        print("\nНе удалось подключиться к базе данных. Проверьте, что PostgreSQL запущен.\n")
 
 
 if __name__ == "__main__":
