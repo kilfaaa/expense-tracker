@@ -1,97 +1,91 @@
-import datetime
 import os
-from decimal import Decimal, InvalidOperation
 
 import psycopg
 
+from models import Expense
+from repository import ExpenseRepository
+from validation import (
+    validate_category_name,
+    validate_description,
+    validate_amount,
+    validate_date,
+    validate_id,
+)
 
-def show_category(conn):
-    with conn.cursor() as cur:
-        cur.execute("SELECT id, name FROM categories ORDER BY id;")
-        for category_id, name in cur.fetchall():
-            print(category_id, name)
 
 
-def add_category(conn):
-    category_name = input("Введите название категории: ").strip()
-    if not category_name:
-        print("\nОшибка: название категории не может быть пустым.\n")
+def show_category(repo):
+    for category_id, name in repo.get_all_categories():
+        print(category_id, name)
+
+
+def add_category(repo):
+    category_name = input("Введите название категории: ")
+    try:
+        category_name = validate_category_name(category_name)
+    except ValueError as error:
+        print(f"\nОшибка: {error}\n")
         return
 
     try:
-        with conn.cursor() as cur:
-            cur.execute("INSERT INTO categories (name) VALUES (%s);", (category_name,))
-        conn.commit()
+        repo.add_category(category_name)
     except psycopg.errors.UniqueViolation:
-        conn.rollback()
+        repo.conn.rollback()
         print("\nОшибка: такая категория уже существует.\n")
         return
 
     print(f"\nКатегория «{category_name}» добавлена.\n")
 
 
-def add_expense(conn):
-    expense_description = input("\nВведите описание расхода: ").strip()
-    if not expense_description:
-        print("\nОшибка: описание расхода не может быть пустым.\n")
-        return
-
-    amount_text = input("Введите потраченную сумму: ").strip().replace(",", ".")
+def add_expense(repo):
+    description_text = input("\nВведите описание расхода: ")
     try:
-        expense_amount = Decimal(amount_text)
-    except InvalidOperation:
-        print("\nОшибка: сумма должна быть числом.\n")
+        expense_description = validate_description(description_text)
+    except ValueError as e:
+        print(f"\nОшибка: {e}\n")
         return
 
-    if not expense_amount.is_finite() or expense_amount <= 0:
-        print("\nОшибка: сумма должна быть больше нуля.\n")
+    amount_text = input("Введите потраченную сумму: ")
+    try:
+        expense_amount = validate_amount(amount_text)
+    except ValueError as e:
+        print(f"\nОшибка: {e}\n")
         return
 
     print()
-    show_category(conn)
-    category_text = input("Выберите номер категории расхода: ").strip()
-    if not category_text.isdigit():
-        print("\nОшибка: номер категории должен быть числом.\n")
-        return
-    category_id = int(category_text)
-
-    date_text = input("Введите дату расхода в формате ГГГГ-ММ-ДД: ").strip()
+    show_category(repo)
+    category_text = input("Выберите номер категории расхода: ")
     try:
-        spent_at = datetime.datetime.strptime(date_text, "%Y-%m-%d").date()
-    except ValueError:
-        print("\nОшибка: неверный формат или несуществующая дата (ГГГГ-ММ-ДД).\n")
+        category_id = validate_id(category_text)
+    except ValueError as e:
+        print(f"\nОшибка: {e}\n")
         return
 
+    date_text = input("Введите дату расхода в формате ГГГГ-ММ-ДД: ")
     try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "INSERT INTO expenses (description, amount, category_id, spent_at) "
-                "VALUES (%s, %s, %s, %s);",
-                (expense_description, expense_amount, category_id, spent_at),
-            )
-        conn.commit()
+        spent_at = validate_date(date_text)
+    except ValueError as error:
+        print(f"\nОшибка: {error}\n")
+        return
+
+    expense = Expense(expense_description, expense_amount, category_id, spent_at)
+
+    try:
+        repo.add_expense(expense)
     except psycopg.errors.ForeignKeyViolation:
-        conn.rollback()
+        repo.conn.rollback()
         print(f"\nОшибка: категории с номером {category_id} не существует.\n")
         return
 
     print(f"\nРасход «{expense_description}» на сумму {expense_amount} добавлен.\n")
-
 
 def print_expenses(rows):
     for expense_id, description, amount, category_name, spent_at in rows:
         print(f"Номер {expense_id}. {description}, {amount}, {category_name}, {spent_at}")
 
 
-def show_expenses(conn):
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT expenses.id, description, amount, categories.name, spent_at "
-            "FROM expenses "
-            "JOIN categories ON expenses.category_id = categories.id "
-            "ORDER BY expenses.id;"
-        )
-        rows = cur.fetchall()
+def show_expenses(repo):
+    rows = repo.get_all_expenses()
 
     if not rows:
         print("\nСписок расходов пуст.\n")
@@ -100,30 +94,21 @@ def show_expenses(conn):
     print_expenses(rows)
 
 
-def show_expenses_in_category(conn):
+def show_expenses_in_category(repo):
     print()
-    show_category(conn)
-    category_text = input("Выберите номер категории: ").strip()
-    if not category_text.isdigit():
-        print("\nОшибка: номер категории должен быть числом.\n")
+    show_category(repo)
+    category_text = input("Выберите номер категории: ")
+    try:
+        category_id = validate_id(category_text)
+    except ValueError as e:
+        print(f"\nОшибка: {e}\n")
         return
-    category_id = int(category_text)
 
-    with conn.cursor() as cur:
-        cur.execute("SELECT id FROM categories WHERE id = %s;", (category_id,))
-        if cur.fetchone() is None:
-            print(f"\nОшибка: категории с номером {category_id} не существует.\n")
-            return
+    if not repo.category_exists(category_id):
+        print(f"\nОшибка: категории с номером {category_id} не существует.\n")
+        return
 
-        cur.execute(
-            "SELECT expenses.id, description, amount, categories.name, spent_at "
-            "FROM expenses "
-            "JOIN categories ON expenses.category_id = categories.id "
-            "WHERE expenses.category_id = %s "
-            "ORDER BY expenses.id;",
-            (category_id,),
-        )
-        rows = cur.fetchall()
+    rows = repo.get_expenses_by_category(category_id)
 
     if not rows:
         print("\nВ этой категории пока нет расходов.\n")
@@ -131,22 +116,17 @@ def show_expenses_in_category(conn):
 
     print_expenses(rows)
 
-
-def change_expense(conn):
+def change_expense(repo):
     print()
-    show_expenses(conn)
-    expense_text = input("Введите номер расхода, который хотите изменить: ").strip()
-    if not expense_text.isdigit():
-        print("\nОшибка: номер расхода должен быть числом.\n")
+    show_expenses(repo)
+    expense_text = input("Введите номер расхода, который хотите изменить: ")
+    try:
+        expense_id = validate_id(expense_text)
+    except ValueError as e:
+        print(f"\nОшибка: {e}\n")
         return
-    expense_id = int(expense_text)
 
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT description, amount, category_id, spent_at FROM expenses WHERE id = %s;",
-            (expense_id,),
-        )
-        current = cur.fetchone()
+    current = repo.get_expense_by_id(expense_id)
 
     if current is None:
         print(f"\nРасход с номером {expense_id} не найден.\n")
@@ -156,61 +136,56 @@ def change_expense(conn):
 
     description_text = input(
         f"Описание [{old_description}] (Enter — оставить без изменений): "
-    ).strip()
-    new_description = description_text if description_text else old_description
+    )
+    new_description = old_description
+    if description_text.strip():
+        try:
+            new_description = validate_description(description_text)
+        except ValueError as e:
+            print(f"\nОшибка: {e}\n")
+            return
 
     amount_text = input(
         f"Сумма [{old_amount}] (Enter — оставить без изменений): "
-    ).strip().replace(",", ".")
-    if amount_text:
+    )
+    new_amount = old_amount
+    if amount_text.strip():
         try:
-            new_amount = Decimal(amount_text)
-        except InvalidOperation:
-            print("\nОшибка: сумма должна быть числом.\n")
+            new_amount = validate_amount(amount_text)
+        except ValueError as e:
+            print(f"\nОшибка: {e}\n")
             return
-        if not new_amount.is_finite() or new_amount <= 0:
-            print("\nОшибка: сумма должна быть больше нуля.\n")
-            return
-    else:
-        new_amount = old_amount
 
     print()
-    show_category(conn)
+    show_category(repo)
     category_text = input(
         f"Номер категории [{old_category_id}] (Enter — оставить без изменений): "
-    ).strip()
-    if category_text:
-        if not category_text.isdigit():
-            print("\nОшибка: номер категории должен быть числом.\n")
+    )
+    new_category_id = old_category_id
+    if category_text.strip():
+        try:
+            new_category_id = validate_id(category_text)
+        except ValueError as e:
+            print(f"\nОшибка: {e}\n")
             return
-        new_category_id = int(category_text)
-    else:
-        new_category_id = old_category_id
 
     date_text = input(
         f"Дата [{old_spent_at}] (Enter — оставить без изменений): "
-    ).strip()
-    if date_text:
+    )
+    new_spent_at = old_spent_at
+    if date_text.strip():
         try:
-            new_spent_at = datetime.datetime.strptime(date_text, "%Y-%m-%d").date()
-        except ValueError:
-            print("\nОшибка: неверный формат или несуществующая дата (ГГГГ-ММ-ДД).\n")
+            new_spent_at = validate_date(date_text)
+        except ValueError as e:
+            print(f"\nОшибка: {e}\n")
             return
-    else:
-        new_spent_at = old_spent_at
+
+    updated_expense = Expense(new_description, new_amount, new_category_id, new_spent_at)
 
     try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE expenses "
-                "SET description = %s, amount = %s, category_id = %s, spent_at = %s "
-                "WHERE id = %s;",
-                (new_description, new_amount, new_category_id, new_spent_at, expense_id),
-            )
-            updated_count = cur.rowcount
-        conn.commit()
+        updated_count = repo.update_expense(expense_id, updated_expense)
     except psycopg.errors.ForeignKeyViolation:
-        conn.rollback()
+        repo.conn.rollback()
         print(f"\nОшибка: категории с номером {new_category_id} не существует.\n")
         return
 
@@ -220,20 +195,16 @@ def change_expense(conn):
 
     print(f"\nРасход {expense_id} обновлён.\n")
 
-
-def delete_expense(conn):
+def delete_expense(repo):
     print()
-    show_expenses(conn)
-    expense_text = input("Введите номер расхода, который хотите удалить: ").strip()
-    if not expense_text.isdigit():
-        print("\nОшибка: номер расхода должен быть числом.\n")
+    show_expenses(repo)
+    expense_text = input("Введите номер расхода, который хотите удалить: ")
+    try:
+        expense_id = validate_id(expense_text)
+    except ValueError as e:
+        print(f"\nОшибка: {e}\n")
         return
-    expense_id = int(expense_text)
-
-    with conn.cursor() as cur:
-        cur.execute("DELETE FROM expenses WHERE id = %s;", (expense_id,))
-        deleted_count = cur.rowcount
-    conn.commit()
+    deleted_count = repo.delete_expense(expense_id)
 
     if deleted_count == 0:
         print(f"\nРасход с номером {expense_id} не найден.\n")
@@ -242,10 +213,8 @@ def delete_expense(conn):
     print(f"\nРасход {expense_id} удалён.\n")
 
 
-def show_expenses_sum(conn):
-    with conn.cursor() as cur:
-        cur.execute("SELECT SUM(amount) FROM expenses;")
-        total = cur.fetchone()[0]
+def show_expenses_sum(repo):
+    total = repo.get_total_sum()
 
     if total is None:
         print("\nСписок расходов пуст, сумма отсутствует.\n")
@@ -254,16 +223,8 @@ def show_expenses_sum(conn):
     print(f"\nОбщая сумма расходов: {total}\n")
 
 
-def show_category_sum(conn):
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT categories.name, SUM(amount) "
-            "FROM expenses "
-            "JOIN categories ON expenses.category_id = categories.id "
-            "GROUP BY categories.name "
-            "ORDER BY categories.name;"
-        )
-        rows = cur.fetchall()
+def show_category_sum(repo):
+    rows = repo.get_sum_by_category()
 
     if not rows:
         print("\nСписок расходов пуст.\n")
@@ -275,78 +236,6 @@ def show_category_sum(conn):
     print()
 
 
-def show_expenses_by_date_range(conn):
-    start_text = input("Введите начальную дату (ГГГГ-ММ-ДД): ").strip()
-    end_text = input("Введите конечную дату (ГГГГ-ММ-ДД): ").strip()
-
-    start_date = datetime.datetime.strptime(start_text, "%Y-%m-%d").date()
-    end_date = datetime.datetime.strptime(end_text, "%Y-%m-%d").date()
-
-    with conn.cursor() as cur:
-        cur.execute(
-            "SELECT expenses.id, description, amount, categories.name, spent_at "
-            "FROM expenses "
-            "JOIN categories ON expenses.category_id = categories.id "
-            "WHERE spent_at BETWEEN %s AND %s "
-            "ORDER BY spent_at;",
-            (start_date, end_date),
-        )
-        rows = cur.fetchall()
-
-    if not rows:
-        print("\nРасходов за этот период нет.\n")
-        return
-
-    print_expenses(rows)
-
-
-def merge_categories(conn):
-    print()
-    show_category(conn)
-
-    old_text = input("Введите номер категории, которую хотите объединить (удалить): ").strip()
-    if not old_text.isdigit():
-        print("\nОшибка: номер категории должен быть числом.\n")
-        return
-    old_category_id = int(old_text)
-
-    new_text = input("Введите номер категории, куда перенести расходы: ").strip()
-    if not new_text.isdigit():
-        print("\nОшибка: номер категории должен быть числом.\n")
-        return
-    new_category_id = int(new_text)
-
-    try:
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE expenses SET category_id = %s WHERE category_id = %s;",
-                (new_category_id, old_category_id),
-            )
-            moved_count = cur.rowcount
-
-            cur.execute(
-                "DELETE FROM categories WHERE id = %s;",
-                (old_category_id,),
-            )
-            deleted_count = cur.rowcount
-
-        conn.commit()
-    except psycopg.errors.ForeignKeyViolation:
-        conn.rollback()
-        print(f"\nОшибка: категории с номером {new_category_id} не существует.\n")
-        return
-    except psycopg.Error:
-        conn.rollback()
-        print("\nОшибка: операция отменена, ничего не изменилось.\n")
-        return
-
-    if deleted_count == 0:
-        print(f"\nКатегория с номером {old_category_id} не найдена.\n")
-        return
-
-    print(f"\nПеренесено расходов: {moved_count}. Категория {old_category_id} удалена.\n")
-
-
 def main():
     database_url = os.getenv("DATABASE_URL")
     if database_url is None:
@@ -355,6 +244,7 @@ def main():
 
     try:
         with psycopg.connect(database_url) as conn:
+            repo = ExpenseRepository(conn)
             while True:
                 print("=== Expense - tracker ==="
                       "\n1. Показать категории"
@@ -373,23 +263,23 @@ def main():
                     if choice == "0":
                         break
                     elif choice == "1":
-                        show_category(conn)
+                        show_category(repo)
                     elif choice == "2":
-                        add_category(conn)
+                        add_category(repo)
                     elif choice == "3":
-                        add_expense(conn)
+                        add_expense(repo)
                     elif choice == "4":
-                        show_expenses(conn)
+                        show_expenses(repo)
                     elif choice == "5":
-                        show_expenses_in_category(conn)
+                        show_expenses_in_category(repo)
                     elif choice == "6":
-                        change_expense(conn)
+                        change_expense(repo)
                     elif choice == "7":
-                        delete_expense(conn)
+                        delete_expense(repo)
                     elif choice == "8":
-                        show_expenses_sum(conn)
+                        show_expenses_sum(repo)
                     elif choice == "9":
-                        show_category_sum(conn)
+                        show_category_sum(repo)
                 else:
                     print("\nОшибка: введите число от 0 до 9.\n")
     except psycopg.OperationalError:
