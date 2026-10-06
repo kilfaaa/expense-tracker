@@ -3,18 +3,18 @@ from decimal import Decimal
 from datetime import date
 
 def test_expense_field():
-    expense = Expense("Проезд", Decimal(50.45), 2, date(2020, 9, 14))
+    expense = Expense("Проезд", Decimal("50.45"), 2, date(2020, 9, 14))
     assert expense.description ==  "Проезд"
-    assert expense.amount == Decimal(50.45)
+    assert expense.amount == Decimal("50.45")
     assert expense.category_id == 2
     assert expense.spent_at == date(2020, 9, 14)
 
 def test_expense_without_id():
-    expense = Expense("Проезд", Decimal(50.45), 2, date(2020, 9, 14))
+    expense = Expense("Проезд", Decimal("50.45"), 2, date(2020, 9, 14))
     assert expense.id is None
 
 def test_expense_with_id():
-    expense = Expense("Проезд", Decimal(50.45), 2, date(2020, 9, 14), id=5)
+    expense = Expense("Проезд", Decimal("50.45"), 2, date(2020, 9, 14), id=5)
     assert expense.id == 5
 
 def test_two_expenses_with_same_data_are_equal():
