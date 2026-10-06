@@ -9,6 +9,23 @@
 фильтровать их по категории и получать статистику: общую сумму
 расходов и суммы по категориям.
 
+## Структура проекта
+
+```text
+expense-tracker/
+├── main.py                       # запуск приложения и меню
+├── validation.py                 # проверка пользовательского ввода
+├── models.py                     # класс Expense
+├── repository.py                 # класс ExpenseRepository — доступ к PostgreSQL
+├── schema.sql                    # структура базы данных
+├── sql_practice.sql              # учебные SQL-запросы
+├── requirements.txt
+├── .github/workflows/tests.yml   # GitHub Actions: запуск тестов на push и pull request
+└── tests/
+    ├── test_validation.py        # тесты функций валидации
+    └── test_models.py            # тесты класса Expense
+```
+
 ## Системные требования
 
 - Python 3.14+
@@ -18,46 +35,46 @@
 
 ### 1. Клонировать репозиторий
 
-
+```bash
 git clone https://github.com/kilfaaa/expense-tracker.git
 cd expense-tracker
-
+```
 
 ### 2. Создать и активировать виртуальное окружение
 
-
+```bash
 python3 -m venv .venv
 source .venv/bin/activate
-
+```
 
 ### 3. Установить зависимости
 
-
+```bash
 pip install -r requirements.txt
-
+```
 
 ### 4. Создать базу данных
 
 В PostgreSQL (например, через pgAdmin или psql) создай пустую базу:
 
-
+```sql
 CREATE DATABASE expense_tracker;
-
+```
 
 ### 5. Применить схему
 
-
+```bash
 psql -U postgres -d expense_tracker -f schema.sql
-
+```
 
 Либо выполни содержимое `schema.sql` в Query Tool pgAdmin, открыв его
 в базе `expense_tracker`.
 
 ### 6. Задать переменную окружения DATABASE_URL
 
-
+```text
 DATABASE_URL=postgresql://пользователь:пароль@localhost:5432/expense_tracker
-
+```
 
 В PyCharm: **Run → Edit Configurations → Environment variables**.
 В терминале перед запуском: `export DATABASE_URL=...` (Linux/macOS)
@@ -65,15 +82,15 @@ DATABASE_URL=postgresql://пользователь:пароль@localhost:5432/e
 
 ### 7. Запустить приложение
 
-
+```bash
 python main.py
-
+```
 
 ## Использование
 
 При запуске появляется меню:
 
-
+```text
 1. Показать категории
 2. Добавить категорию
 3. Добавить расход
@@ -83,70 +100,44 @@ python main.py
 7. Удалить расход
 8. Показать общую сумму расходов
 9. Показать суммы по категориям
-0. Выход.
-
+0. Выход
+```
 
 Данные хранятся в PostgreSQL и сохраняются между запусками программы.
 
-## Что я изучил
+## Тесты
 
-- проектирование двух связанных таблиц и выбор типов PostgreSQL:
-  `SERIAL` для идентификатора, `VARCHAR`/`TEXT` для текста, `DECIMAL`
-  для денег вместо `float`, `DATE` для даты
-- ограничения `NOT NULL`, `UNIQUE`, `CHECK`, `FOREIGN KEY` и поведение
-  `ON DELETE RESTRICT`
-- транзакции и счётчик `SERIAL`: почему `id` не переиспользуются после
-  отката или ошибки
-- SQL: `SELECT`, `WHERE`, `ORDER BY`, `LIMIT`, `UPDATE`, `DELETE`,
-  `JOIN`, агрегатные функции (`COUNT`, `SUM`, `AVG`), `GROUP BY`
-- подключение к PostgreSQL из Python через `psycopg`, работа
-  с `connection` и `cursor`
-- параметризованные запросы (`%s`) вместо f-строк и почему это защищает
-  от SQL injection
-- транзакции в `psycopg`: `commit()`, `rollback()`, когда изменения
-  становятся постоянными и что происходит при сбое до фиксации
-- обработка конкретных исключений (`UniqueViolation`,
-  `ForeignKeyViolation`, `OperationalError`) вместо голого `except`
+Юнит-тесты проверяют функции валидации (`validation.py`) и модель
+`Expense` (`models.py`). Они не подключаются к базе данных и не
+требуют пароля PostgreSQL — запускаются в полностью изолированном
+окружении.
 
-## Отчёт
+Запуск:
 
-### Что сделал самостоятельно
+```bash
+python -m pytest
+```
 
-Спроектировал схему двух таблиц и сам выбрал типы данных для каждого
-поля. Написал и выполнил все SQL-запросы в `sql_practice.sql`,
-проверил каждый в pgAdmin. Написал структуру меню и диспетчер команд
-в `main.py`. Самостоятельно написал все функции. Прошёл вручную все случаи ошибочного
-ввода из части 11 задания по каждой команде меню.
+Подробный вывод (список каждого теста):
 
-### Где использовал AI
+```bash
+python -m pytest -v
+```
 
-При отладке подключения к PostgreSQL (ошибки с паролем и с
-несуществующей базой `expense_tracker`). При разборе того, какие
-исключения `psycopg` нужно ловить в разных ситуациях. При написании
-`add_expense`, `change_expense`, `show_expenses_sum`,
-`show_category_sum`. При добавлении обработки `psycopg.OperationalError`
-вокруг подключения в `main()`.
+### Что проверяют тесты
 
-### Что именно предложил AI
+- `validate_amount` — корректные суммы, суммы с запятой вместо точки,
+  отклонение текста, нуля и отрицательных значений
+- `validate_date` — корректная дата, отклонение неверного формата
+- `validate_id` — корректный числовой ID, отклонение текста и других
+  некорректных значений (с использованием `@pytest.mark.parametrize`)
+- `validate_category_name` / `validate_description` — непустой текст,
+  отклонение пустой строки
+- `Expense` — хранение полей, значение `id` по умолчанию, сравнение
+  объектов по значениям
 
-Полный код функции `add_expense` с проверкой суммы через `Decimal`
-и `InvalidOperation`, проверкой `is_finite()` и обработкой
-`ForeignKeyViolation`. Исправление ошибок в моём черновике: опечатка
-`spent at` вместо `spent_at`, синтаксическая ошибка в `except`
-с комментарием вместо типа исключения, неверный импорт
-`from unicodedata import decimal`. Код `change_expense` с частичным
-изменением полей (Enter — оставить старое значение) и проверкой через
-`cur.rowcount`. Оборачивание `psycopg.connect(...)` в `try/except
-psycopg.OperationalError` в `main()`.
+### Continuous Integration
 
-### Как проверил предложенный код или SQL
-
-Прогнал вручную по каждой команде меню: пустое название/описание,
-`hello` вместо суммы, нулевую и отрицательную сумму, несуществующий
-`category_id` и `expense_id`, неверный формат даты. Проверял
-результат каждой команды через `SELECT` в pgAdmin, сверяя, что данные
-действительно сохранились или не сохранились. Проверил разницу между
-`commit()` и его отсутствием: останавливал программу кнопкой Stop в PyCharm
-после изменения без коммита и убеждался, что изменение не сохранилось,
-а после коммита — сохранилось. Проверил обработку недоступной базы,
-временно указав неверный порт в `DATABASE_URL`.
+При каждом push и pull request GitHub Actions автоматически
+устанавливает зависимости и запускает `python -m pytest`
+(см. `.github/workflows/tests.yml`).
