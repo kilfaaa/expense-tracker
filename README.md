@@ -141,3 +141,50 @@ python -m pytest -v
 При каждом push и pull request GitHub Actions автоматически
 устанавливает зависимости и запускает `python -m pytest`
 (см. `.github/workflows/tests.yml`).
+
+
+## HTTP API (FastAPI)
+
+### Требования
+Python 3.14+, PostgreSQL 18.6, зависимости из `requirements.txt`:
+`pip install -r requirements.txt`
+
+### База данных и переменная окружения
+Приложение подключается к PostgreSQL через переменную `DATABASE_URL`. Пример (значения вымышленные):
+
+    export DATABASE_URL="postgresql://user:password@localhost:5432/expense_tracker"
+
+Схема базы лежит в `schema.sql`.
+
+### Запуск
+Консольное приложение: `python main.py`
+
+API: `fastapi dev api.py`
+
+Интерактивная документация открывается по адресу http://127.0.0.1:8000/docs
+
+### Маршруты
+| Метод | Путь | Описание | Успех | Ошибки |
+|---|---|---|---|---|
+| GET | `/health` | проверка работы сервиса | 200 | — |
+| GET | `/expenses` | список расходов | 200 | — |
+| GET | `/expenses/{expense_id}` | один расход | 200 | 404, 422 |
+| POST | `/expenses` | создать расход | 201 | 404, 422 |
+
+### Пример создания расхода
+Запрос:
+
+    POST /expenses
+    {"description": "Кофе", "amount": "150.00", "category_id": 1, "spent_at": "2026-10-20"}
+
+Ответ (201):
+
+    {"id": 7, "description": "Кофе", "amount": "150.00", "category_id": 1, "spent_at": "2026-10-20"}
+
+### Тесты
+`python -m pytest -v`
+
+Тесты API используют `FakeExpenseRepository` (хранит данные в памяти) 
+и подмену зависимости через `app.dependency_overrides`.
+Поэтому для них не нужны PostgreSQL и пароли, и они проходят в CI.
+SQL-запросы проверяются вручную на реальной базе.
