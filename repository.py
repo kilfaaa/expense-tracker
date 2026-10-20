@@ -90,3 +90,40 @@ class ExpenseRepository:
                 "ORDER BY categories.name;"
             )
             return cur.fetchall()
+
+    def list_expenses(self):
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, description, amount, category_id, spent_at "
+                "FROM expenses ORDER BY id"
+            )
+            rows = cur.fetchall()
+        return [
+            {"id": r[0], "description": r[1], "amount": r[2],
+             "category_id": r[3], "spent_at": r[4]}
+            for r in rows
+        ]
+
+    def get_expense(self, expense_id):
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, description, amount, category_id, spent_at "
+                "FROM expenses WHERE id = %s",
+                (expense_id,),
+            )
+            r = cur.fetchone()
+        if r is None:
+            return None
+        return {"id": r[0], "description": r[1], "amount": r[2],
+                "category_id": r[3], "spent_at": r[4]}
+
+    def create_expense(self, expense):
+        with self.conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO expenses (description, amount, category_id, spent_at) "
+                "VALUES (%s, %s, %s, %s) RETURNING id",
+                (expense.description, expense.amount, expense.category_id, expense.spent_at),
+            )
+            new_id = cur.fetchone()[0]
+        self.conn.commit()
+        return new_id
